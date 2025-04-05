@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Explorer - Book a Flight</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-utensils"></i>
+                Food Explorer
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="recipes.html">Recipes</a></li>
+                <li><a href="#categories">Categories</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Flight Booking Section -->
+    <section class="flight-booking">
+        <div class="container">
+            <div class="flight-content">
+                <h1>Book Your Flight</h1>
+                <div class="flight-search">
+                    <form id="flight-search-form">
+                        <div class="search-form">
+                            <div class="form-group">
+                                <label for="departure">From</label>
+                                <input type="text" id="departure" placeholder="City or Airport" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="destination">To</label>
+                                <input type="text" id="destination" placeholder="City or Airport" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label for="departure-date">Departure Date</label>
+                                <input type="date" id="departure-date" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="return-date">Return Date</label>
+                                <input type="date" id="return-date">
+                            </div>
+                            <div class="form-group">
+                                <label for="passengers">Passengers</label>
+                                <input type="number" id="passengers" min="1" max="9" value="1" required>
+                            </div>
+                            <button type="submit" class="search-button">
+                                <i class="fas fa-search"></i> Search Flights
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="flight-results">
+                    <h2>Available Flights</h2>
+                    <div class="flight-cards" id="flight-results">
+                        <!-- Flight results will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Amadeus API Configuration
+        const AMADEUS_API_KEY = 'dNaHYoJ5vGlrcKUyeEXdJ6i7QiOUnU3f';
+        const AMADEUS_API_SECRET = 'GAJF5C4o7FfOeNkX';
+        const AMADEUS_BASE_URL = 'https://test.api.amadeus.com';
+
+        // Cuisine to Airport Code Mapping
+        const cuisineToAirport = {
+            'Italian': { code: 'FCO', country: 'Italy' }, // Rome
+            'American': { code: 'JFK', country: 'United States' }, // New York
+            'Canadian': { code: 'YYZ', country: 'Canada' }, // Toronto
+            'Mexican': { code: 'MEX', country: 'Mexico' }, // Mexico City
+            'Japanese': { code: 'HND', country: 'Japan' }, // Tokyo
+            'Chinese': { code: 'PEK', country: 'China' }, // Beijing
+            'Indian': { code: 'DEL', country: 'India' }, // Delhi
+            'French': { code: 'CDG', country: 'France' }, // Paris
+            'Spanish': { code: 'MAD', country: 'Spain' }, // Madrid
+            'Greek': { code: 'ATH', country: 'Greece' }, // Athens
+            'Thai': { code: 'BKK', country: 'Thailand' }, // Bangkok
+            'Vietnamese': { code: 'SGN', country: 'Vietnam' }, // Ho Chi Minh City
+            'Korean': { code: 'ICN', country: 'South Korea' }, // Seoul
+            'Brazilian': { code: 'GRU', country: 'Brazil' }, // São Paulo
+            'Peruvian': { code: 'LIM', country: 'Peru' }, // Lima
+            'Turkish': { code: 'IST', country: 'Turkey' }, // Istanbul
+            'Moroccan': { code: 'CMN', country: 'Morocco' }, // Casablanca
+            'Lebanese': { code: 'BEY', country: 'Lebanon' }, // Beirut
+            'Russian': { code: 'SVO', country: 'Russia' }, // Moscow
+            'German': { code: 'FRA', country: 'Germany' }  // Frankfurt
+        };
+
+        // Get destination from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const destination = urlParams.get('origin');
+        if (destination) {
+            const destinationInfo = cuisineToAirport[destination];
+            if (destinationInfo) {
+                document.getElementById('destination').value = destinationInfo.country;
+            }
+        }
+
+        // Set minimum dates for date inputs
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('departure-date').min = today;
+        document.getElementById('return-date').min = today;
+
+        // Update return date minimum when departure date changes
+        document.getElementById('departure-date').addEventListener('change', function() {
+            document.getElementById('return-date').min = this.value;
+        });
+
+        // Function to get Amadeus access token
+        async function getAccessToken() {
+            try {
+                const response = await fetch(`${AMADEUS_BASE_URL}/v1/security/oauth2/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: `grant_type=client_credentials&client_id=${AMADEUS_API_KEY}&client_secret=${AMADEUS_API_SECRET}`
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get access token');
+                }
+
+                const data = await response.json();
+                return data.access_token;
+            } catch (error) {
+                console.error('Error getting access token:', error);
+                throw error;
+            }
+        }
+
+        // Function to search for flights
+        async function searchFlights(departure, destination, departureDate, returnDate, passengers) {
+            try {
+                const accessToken = await getAccessToken();
+                
+                // First, get airport codes
+                const airportResponse = await fetch(`${AMADEUS_BASE_URL}/v1/reference-data/locations?keyword=${departure}&subType=CITY,AIRPORT`, {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                if (!airportResponse.ok) {
+                    throw new Error('Failed to get airport codes');
+                }
+
+                const airportData = await airportResponse.json();
+                const originCode = airportData.data[0]?.iataCode;
+
+                // Find the cuisine that matches the country name
+                let cuisineName = null;
+                for (const [cuisine, info] of Object.entries(cuisineToAirport)) {
+                    if (info.country === destination) {
+                        cuisineName = cuisine;
+                        break;
+                    }
+                }
+
+                if (!cuisineName) {
+                    throw new Error(`No cuisine found for country: ${destination}`);
+                }
+
+                // Get destination airport code from mapping
+                const destinationInfo = cuisineToAirport[cuisineName];
+                if (!destinationInfo) {
+                    throw new Error(`No airport code found for ${destination}`);
+                }
+                const destinationCode = destinationInfo.code;
+
+                // Search for flights
+                const flightResponse = await fetch(`${AMADEUS_BASE_URL}/v2/shopping/flight-offers?originLocationCode=${originCode}&destinationLocationCode=${destinationCode}&departureDate=${departureDate}&adults=${passengers}&max=5`, {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                if (!flightResponse.ok) {
+                    throw new Error('Failed to search for flights');
+                }
+
+                const flightData = await flightResponse.json();
+                return flightData.data;
+            } catch (error) {
+                console.error('Error searching flights:', error);
+                throw error;
+            }
+        }
+
+        // Function to display flight results
+        function displayFlights(flights) {
+            const resultsContainer = document.getElementById('flight-results');
+            resultsContainer.innerHTML = '';
+
+            if (!flights || flights.length === 0) {
+                resultsContainer.innerHTML = '<p class="no-results">No flights found. Please try different dates or locations.</p>';
+                return;
+            }
+
+            flights.forEach(flight => {
+                const card = document.createElement('div');
+                card.className = 'flight-card';
+                
+                const departure = flight.itineraries[0].segments[0].departure;
+                const arrival = flight.itineraries[0].segments[flight.itineraries[0].segments.length - 1].arrival;
+                
+                card.innerHTML = `
+                    <div class="flight-header">
+                        <span class="airline">${flight.validatingAirlineCodes[0]}</span>
+                        <span class="flight-number">Flight ${flight.itineraries[0].segments[0].number}</span>
+                    </div>
+                    <div class="flight-details">
+                        <div class="time">
+                            <div class="departure">
+                                <span class="time">${new Date(departure.at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span class="city">${departure.iataCode}</span>
+                            </div>
+                            <div class="duration">${flight.itineraries[0].duration}</div>
+                            <div class="arrival">
+                                <span class="time">${new Date(arrival.at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span class="city">${arrival.iataCode}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flight-price">
+                        <span class="price">$${flight.price.total}</span>
+                        <button class="book-button" onclick="bookFlight('${flight.id}')">
+                            Book Now
+                        </button>
+                    </div>
+                `;
+                
+                resultsContainer.appendChild(card);
+            });
+        }
+
+        // Handle form submission
+        document.getElementById('flight-search-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const departure = document.getElementById('departure').value;
+            const destination = document.getElementById('destination').value;
+            const departureDate = document.getElementById('departure-date').value;
+            const returnDate = document.getElementById('return-date').value;
+            const passengers = document.getElementById('passengers').value;
+
+            try {
+                const flights = await searchFlights(departure, destination, departureDate, returnDate, passengers);
+                displayFlights(flights);
+            } catch (error) {
+                document.getElementById('flight-results').innerHTML = `
+                    <div class="error">
+                        <p>Error searching for flights. Please try again later.</p>
+                        <p class="error-details">${error.message}</p>
+                    </div>
+                `;
+            }
+        });
+
+        // Function to handle flight booking
+        function bookFlight(flightId) {
+            // This would be replaced with actual booking logic
+            alert('Flight booking functionality coming soon!');
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Explorer - Recipe Details</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-utensils"></i>
+                Food Explorer
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="recipes.html">Recipes</a></li>
+                <li><a href="#categories">Categories</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Recipe Details Section -->
+    <section class="recipe-details">
+        <div class="container">
+            <div class="recipe-content">
+                <div class="recipe-image">
+                    <img id="recipe-img" src="" alt="">
+                    <div class="flight-booking-prompt">
+                        <h3>Experience this dish in its country of origin!</h3>
+                        <button class="book-flight-button" onclick="window.location.href='flight-booking.html'">
+                            <i class="fas fa-plane"></i> Book a Flight
+                        </button>
+                    </div>
+                </div>
+                <div class="recipe-info">
+                    <h1 id="recipe-title"></h1>
+                    <div class="recipe-meta">
+                        <span id="recipe-calories"></span>
+                        <span id="recipe-time"></span>
+                        <span id="recipe-servings"></span>
+                        <span id="recipe-price"></span>
+                        <span id="recipe-health-score"></span>
+                    </div>
+                    <div id="recipe-summary" class="recipe-summary"></div>
+                </div>
+            </div>
+
+            <div class="recipe-sections">
+                <div class="recipe-section">
+                    <h2>Nutrition Information</h2>
+                    <div class="nutrition-grid">
+                        <div class="nutrition-item">
+                            <span class="nutrition-label">Calories</span>
+                            <span class="nutrition-value" id="nutrition-calories"></span>
+                        </div>
+                        <div class="nutrition-item">
+                            <span class="nutrition-label">Protein</span>
+                            <span class="nutrition-value" id="nutrition-protein"></span>
+                        </div>
+                        <div class="nutrition-item">
+                            <span class="nutrition-label">Fat</span>
+                            <span class="nutrition-value" id="nutrition-fat"></span>
+                        </div>
+                        <div class="nutrition-item">
+                            <span class="nutrition-label">Carbs</span>
+                            <span class="nutrition-value" id="nutrition-carbs"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="recipe-section">
+                    <h2>Dietary Information</h2>
+                    <div id="recipe-diets" class="diet-tags"></div>
+                </div>
+                <div class="recipe-section">
+                    <h2>Ingredients</h2>
+                    <ul id="recipe-ingredients"></ul>
+                </div>
+                <div class="recipe-section">
+                    <h2>Instructions</h2>
+                    <ol id="recipe-instructions"></ol>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Placeholder pizza data
+        const placeholderPizza = {
+            title: "Classic Margherita Pizza",
+            image: "https://images.unsplash.com/photo-1593504049359-24ca789299e6?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
+            calories: 285,
+            readyInMinutes: 30,
+            servings: 4,
+            pricePerServing: 5.99,
+            healthScore: 75,
+            summary: "A classic Italian pizza with fresh tomatoes, mozzarella, basil, and extra virgin olive oil. Simple yet delicious!",
+            extendedIngredients: [
+                { original: "1 pizza dough" },
+                { original: "1/2 cup tomato sauce" },
+                { original: "8 oz fresh mozzarella" },
+                { original: "Fresh basil leaves" },
+                { original: "2 tbsp extra virgin olive oil" },
+                { original: "Salt and pepper to taste" }
+            ],
+            analyzedInstructions: [{
+                steps: [
+                    { step: "Preheat oven to 475°F (245°C)" },
+                    { step: "Roll out the pizza dough on a floured surface" },
+                    { step: "Spread tomato sauce evenly over the dough" },
+                    { step: "Add slices of mozzarella cheese" },
+                    { step: "Bake for 10-12 minutes until crust is golden" },
+                    { step: "Top with fresh basil leaves and drizzle with olive oil" }
+                ]
+            }],
+            diets: ["Vegetarian", "Mediterranean"],
+            cuisines: ["Italian"]
+        };
+
+        function displayRecipeDetails() {
+            try {
+                // Helper function to safely set text content
+                function setTextContent(elementId, text) {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.textContent = text;
+                    }
+                }
+
+                // Helper function to safely set inner HTML
+                function setInnerHTML(elementId, html) {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.innerHTML = html;
+                    }
+                }
+
+                // Update the page with recipe details
+                setTextContent('recipe-title', placeholderPizza.title);
+                const recipeImg = document.getElementById('recipe-img');
+                if (recipeImg) {
+                    recipeImg.src = placeholderPizza.image;
+                    recipeImg.alt = placeholderPizza.title;
+                }
+                
+                // Update recipe meta information
+                setTextContent('recipe-calories', `${placeholderPizza.calories} cal`);
+                setTextContent('recipe-time', `${placeholderPizza.readyInMinutes} min`);
+                setTextContent('recipe-servings', `${placeholderPizza.servings} servings`);
+                setTextContent('recipe-price', `$${placeholderPizza.pricePerServing.toFixed(2)} per serving`);
+                setTextContent('recipe-health-score', `${placeholderPizza.healthScore}% health score`);
+                
+                // Update recipe sections
+                setInnerHTML('recipe-summary', placeholderPizza.summary);
+                
+                // Update ingredients list
+                setInnerHTML('recipe-ingredients', 
+                    placeholderPizza.extendedIngredients
+                        .map(ingredient => `<li>${ingredient.original}</li>`)
+                        .join('')
+                );
+                
+                // Update instructions
+                setInnerHTML('recipe-instructions',
+                    placeholderPizza.analyzedInstructions[0].steps
+                        .map(step => `<li>${step.step}</li>`)
+                        .join('')
+                );
+                
+                // Update nutrition information
+                setTextContent('nutrition-calories', `${placeholderPizza.calories} cal`);
+                setTextContent('nutrition-protein', '12g');
+                setTextContent('nutrition-fat', '10g');
+                setTextContent('nutrition-carbs', '35g');
+                
+                // Update diet tags
+                setInnerHTML('recipe-diets',
+                    placeholderPizza.diets
+                        .map(diet => `<span class="diet-tag">${diet}</span>`)
+                        .join('')
+                );
+                
+                // Update origin information
+                const flightPrompt = document.querySelector('.flight-booking-prompt');
+                if (flightPrompt) {
+                    const cuisine = placeholderPizza.cuisines[0] || 'Various';
+                    flightPrompt.innerHTML = `
+                        <h3>Experience this dish in its country of origin!</h3>
+                        <p>This dish originates from ${cuisine}.</p>
+                        <button class="book-flight-button" onclick="window.location.href='flight-booking.html?origin=${encodeURIComponent(cuisine)}'">
+                            <i class="fas fa-plane"></i> Book a Flight to ${cuisine}
+                        </button>
+                    `;
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                const recipeContent = document.querySelector('.recipe-content');
+                if (recipeContent) {
+                    recipeContent.innerHTML = `
+                        <div class="error">
+                            <p>Error loading recipe details. Please try again later.</p>
+                            <p class="error-details">${error.message}</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Display recipe details when the page loads
+        document.addEventListener('DOMContentLoaded', displayRecipeDetails);
+    </script>
+</body>
+</html> 
