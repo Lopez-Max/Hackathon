@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cooked - Book a Flight</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-utensils"></i>
+                <h1>Cooked</h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="recipes.html">Recipes</a></li>
+                <li><a href="#categories">Categories</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Flight Booking Section -->
+    <section class="flight-booking">
+        <div class="container">
+            <div class="flight-content">
+                <h1>Cooked</h1>
+                <div class="flight-search">
+                    <form id="flight-search-form">
+                        <div class="search-form">
+                            <div class="form-group">
+                                <label for="origin">From</label>
+                                <input type="text" id="origin" name="origin" required>
+                                <div id="origin-autocomplete" class="autocomplete-dropdown"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="destination">To</label>
+                                <input type="text" id="destination" name="destination" required>
+                                <div id="destination-autocomplete" class="autocomplete-dropdown"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="departure-date">Departure Date</label>
+                                <input type="date" id="departure-date" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="return-date">Return Date</label>
+                                <input type="date" id="return-date">
+                            </div>
+                            <div class="form-group">
+                                <label for="passengers">Number of Passengers</label>
+                                <input type="number" id="passengers" min="1" max="9" value="1">
+                            </div>
+                            <div class="form-group">
+                                <label for="seat-class">Seat Class</label>
+                                <select id="seat-class">
+                                    <option value="economy">Economy</option>
+                                    <option value="premium">Premium Economy</option>
+                                    <option value="business">Business Class</option>
+                                    <option value="first">First Class</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="search-button">
+                                <i class="fas fa-search"></i> Search Flights
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="flight-results">
+                    <h2>Available Flights</h2>
+                    <div class="flight-cards" id="flight-results">
+                        <!-- Flight results will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Amadeus API Configuration
+        const AMADEUS_BASE_URL = 'https://test.api.amadeus.com';
+        const AMADEUS_CLIENT_ID = 'dNaHYoJ5vGlrcKUyeEXdJ6i7QiOUnU3f';
+        const AMADEUS_CLIENT_SECRET = 'GAJF5C4o7FfOeNkX';
+
+        // Cuisine to Airport Code Mapping
+        const cuisineToAirport = {
+            'Italian': { code: 'FCO', country: 'Italy' }, // Rome
+            'American': { code: 'JFK', country: 'United States' }, // New York
+            'Canadian': { code: 'YYZ', country: 'Canada' }, // Toronto
+            'Mexican': { code: 'MEX', country: 'Mexico' }, // Mexico City
+            'Japanese': { code: 'HND', country: 'Japan' }, // Tokyo
+            'Chinese': { code: 'PEK', country: 'China' }, // Beijing
+            'Indian': { code: 'DEL', country: 'India' }, // Delhi
+            'French': { code: 'CDG', country: 'France' }, // Paris
+            'Spanish': { code: 'MAD', country: 'Spain' }, // Madrid
+            'Greek': { code: 'ATH', country: 'Greece' }, // Athens
+            'Thai': { code: 'BKK', country: 'Thailand' }, // Bangkok
+            'Vietnamese': { code: 'SGN', country: 'Vietnam' }, // Ho Chi Minh City
+            'Korean': { code: 'ICN', country: 'South Korea' }, // Seoul
+            'Brazilian': { code: 'GRU', country: 'Brazil' }, // São Paulo
+            'Peruvian': { code: 'LIM', country: 'Peru' }, // Lima
+            'Turkish': { code: 'IST', country: 'Turkey' }, // Istanbul
+            'Moroccan': { code: 'CMN', country: 'Morocco' }, // Casablanca
+            'Lebanese': { code: 'BEY', country: 'Lebanon' }, // Beirut
+            'Russian': { code: 'SVO', country: 'Russia' }, // Moscow
+            'German': { code: 'FRA', country: 'Germany' }  // Frankfurt
+        };
+
+        // Get destination from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const destination = urlParams.get('origin');
+        const airportCode = urlParams.get('airport');
+        
+        if (destination) {
+            document.getElementById('destination').value = destination;
+        }
+
+        // Set minimum dates for date inputs
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('departure-date').min = today;
+        document.getElementById('return-date').min = today;
+
+        // Update return date minimum when departure date changes
+        document.getElementById('departure-date').addEventListener('change', function() {
+            document.getElementById('return-date').min = this.value;
+        });
+
+        // Function to get access token
+        async function getAccessToken() {
+            try {
+                const response = await fetch(`${AMADEUS_BASE_URL}/v1/security/oauth2/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: `grant_type=client_credentials&client_id=${AMADEUS_CLIENT_ID}&client_secret=${AMADEUS_CLIENT_SECRET}`
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get access token');
+                }
+
+                const data = await response.json();
+                return data.access_token;
+            } catch (error) {
+                console.error('Error getting access token:', error);
+                throw error;
+            }
+        }
+
+        // Function to format time
+        function formatTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Function to format duration
+        function formatDuration(duration) {
+            // Remove PT from the start of the duration string
+            duration = duration.replace('PT', '');
+            let hours = 0;
+            let minutes = 0;
+
+            // Check for hours
+            const hourIndex = duration.indexOf('H');
+            if (hourIndex !== -1) {
+                hours = parseInt(duration.substring(0, hourIndex));
+                duration = duration.substring(hourIndex + 1);
+            }
+
+            // Check for minutes
+            const minuteIndex = duration.indexOf('M');
+            if (minuteIndex !== -1) {
+                minutes = parseInt(duration.substring(0, minuteIndex));
+            }
+
+            // Format the duration
+            if (hours > 0 && minutes > 0) {
+                return `${hours}h ${minutes}m`;
+            } else if (hours > 0) {
+                return `${hours}h`;
+            } else {
+                return `${minutes}m`;
+            }
+        }
+
+        // Function to search for flights
+        async function searchFlights(departure, destination, departureDate, returnDate, passengers) {
+            try {
+                const accessToken = await getAccessToken();
+                
+                // Extract airport codes from the input values
+                const originCode = departure.split(' - ')[0];
+                const destinationCode = destination.split(' - ')[0];
+
+                // Search for flights
+                const flightResponse = await fetch(
+                    `${AMADEUS_BASE_URL}/v2/shopping/flight-offers?` +
+                    `originLocationCode=${originCode}&` +
+                    `destinationLocationCode=${destinationCode}&` +
+                    `departureDate=${departureDate}&` +
+                    `adults=${passengers}&` +
+                    'max=5', {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                if (!flightResponse.ok) {
+                    throw new Error('Failed to search for flights');
+                }
+
+                const flightData = await flightResponse.json();
+                
+                // Filter out duplicate flights
+                const uniqueFlights = [];
+                const seenFlights = new Set();
+
+                flightData.data.forEach(flight => {
+                    const firstSegment = flight.itineraries[0].segments[0];
+                    const flightKey = `${firstSegment.carrierCode}${firstSegment.number}-${firstSegment.departure.at}-${firstSegment.arrival.at}`;
+                    
+                    if (!seenFlights.has(flightKey)) {
+                        seenFlights.add(flightKey);
+                        uniqueFlights.push(flight);
+                    }
+                });
+
+                return uniqueFlights;
+            } catch (error) {
+                console.error('Error searching flights:', error);
+                throw error;
+            }
+        }
+
+        // Function to display flight results
+        function displayFlights(flights) {
+            const resultsContainer = document.getElementById('flight-results');
+            resultsContainer.innerHTML = '';
+
+            if (!flights || flights.length === 0) {
+                resultsContainer.innerHTML = '<p class="no-results">No flights found. Please try different dates or locations.</p>';
+                return;
+            }
+
+            // Airline code to name mapping
+            const airlineNames = {
+                'AA': 'American Airlines',
+                'DL': 'Delta Air Lines',
+                'UA': 'United Airlines',
+                'BA': 'British Airways',
+                'AF': 'Air France',
+                'LH': 'Lufthansa',
+                'KL': 'KLM',
+                'SQ': 'Singapore Airlines',
+                'EK': 'Emirates',
+                'QF': 'Qantas',
+                'JL': 'Japan Airlines',
+                'NH': 'ANA',
+                'CA': 'Air China',
+                'MU': 'China Eastern',
+                'CZ': 'China Southern',
+                'TK': 'Turkish Airlines',
+                'QR': 'Qatar Airways',
+                'EY': 'Etihad Airways',
+                'VS': 'Virgin Atlantic',
+                'AC': 'Air Canada'
+            };
+
+            flights.forEach(flight => {
+                const firstSegment = flight.itineraries[0].segments[0];
+                const lastSegment = flight.itineraries[0].segments[flight.itineraries[0].segments.length - 1];
+                const airlineCode = flight.validatingAirlineCodes[0];
+                const airlineName = airlineNames[airlineCode] || airlineCode;
+                const seatClass = document.getElementById('seat-class').value;
+                const capitalizedSeatClass = seatClass.charAt(0).toUpperCase() + seatClass.slice(1);
+                
+                // Calculate price based on seat class
+                const basePrice = parseFloat(flight.price.total);
+                let finalPrice = basePrice;
+                
+                switch(seatClass) {
+                    case 'premium':
+                        finalPrice = basePrice * 1.5; // 50% more for premium economy
+                        break;
+                    case 'business':
+                        finalPrice = basePrice * 2.5; // 150% more for business class
+                        break;
+                    case 'first':
+                        finalPrice = basePrice * 4; // 300% more for first class
+                        break;
+                    default:
+                        finalPrice = basePrice; // Economy class stays the same
+                }
+                
+                const flightCard = document.createElement('div');
+                flightCard.className = 'flight-card';
+                flightCard.innerHTML = `
+                    <div class="flight-header">
+                        <div class="airline-info">
+                            <i class="fas fa-plane-departure"></i>
+                            <span class="airline">${airlineName}</span>
+                            <span class="flight-number">${firstSegment.carrierCode}${firstSegment.number}</span>
+                        </div>
+                        <div class="flight-type">
+                            <span class="seat-class">${capitalizedSeatClass}</span>
+                        </div>
+                    </div>
+                    <div class="flight-details">
+                        <div class="time">
+                            <div class="departure">
+                                <span class="time">${formatTime(firstSegment.departure.at)}</span>
+                                <span class="airport">${firstSegment.departure.iataCode}</span>
+                            </div>
+                            <div class="duration">
+                                <i class="fas fa-plane"></i>
+                                <span>${formatDuration(flight.itineraries[0].duration)}</span>
+                            </div>
+                            <div class="arrival">
+                                <span class="time">${formatTime(lastSegment.arrival.at)}</span>
+                                <span class="airport">${lastSegment.arrival.iataCode}</span>
+                            </div>
+                        </div>
+                        <div class="flight-stops">
+                            ${flight.itineraries[0].segments.length > 1 ? 
+                                `<span class="stops">${flight.itineraries[0].segments.length - 1} stop(s)</span>` : 
+                                '<span class="direct">Direct flight</span>'}
+                        </div>
+                    </div>
+                    <div class="flight-price">
+                        <div class="price-details">
+                            <span class="price">$${finalPrice.toFixed(2)}</span>
+                            <span class="per-person">per person</span>
+                        </div>
+                        <button class="book-button" onclick="showSeatMap('${flight.id}')">
+                            <i class="fas fa-shopping-cart"></i> Book Now
+                        </button>
+                    </div>
+                `;
+                
+                resultsContainer.appendChild(flightCard);
+            });
+        }
+
+        // Handle form submission
+        document.getElementById('flight-search-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const departure = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
+            const departureDate = document.getElementById('departure-date').value;
+            const returnDate = document.getElementById('return-date').value;
+            const passengers = document.getElementById('passengers').value;
+
+            try {
+                const flights = await searchFlights(departure, destination, departureDate, returnDate, passengers);
+                displayFlights(flights);
+            } catch (error) {
+                document.getElementById('flight-results').innerHTML = `
+                    <div class="error">
+                        <p>Error searching for flights. Please try again later.</p>
+                        <p class="error-details">${error.message}</p>
+                    </div>
+                `;
+            }
+        });
+
+        // Function to get seat map
+        async function getSeatMap(flightOfferId) {
+            try {
+                // Get the flight offer details to get the base price
+                const accessToken = await getAccessToken();
+                
+                // First, get the flight offer details from the flight card
+                const flightCard = document.querySelector(`.book-button[onclick*="${flightOfferId}"]`).closest('.flight-card');
+                const priceText = flightCard.querySelector('.price').textContent;
+                const basePrice = parseFloat(priceText.replace('$', ''));
+                const stopsText = flightCard.querySelector('.stops, .direct').textContent;
+                const numberOfStops = stopsText.includes('Direct') ? 0 : parseInt(stopsText.match(/\d+/)[0]);
+                const pricePerStop = basePrice / (numberOfStops + 1);
+
+                // Create a mock seat map with prices
+                return {
+                    data: [{
+                        type: "seatmap",
+                        id: flightOfferId,
+                        decks: [{
+                            deckType: "LOWER",
+                            deckConfiguration: {
+                                width: 6,
+                                length: 30,
+                                startSeatRow: 1,
+                                endSeatRow: 30
+                            },
+                            seats: Array.from({length: 180}, (_, i) => {
+                                const row = Math.floor(i / 6) + 1;
+                                const col = i % 6;
+                                const seatNumber = `${row}${String.fromCharCode(65 + col)}`;
+                                const isOccupied = Math.random() < 0.2; // 20% chance of being occupied
+                                const isPremium = row <= 5; // First 5 rows are premium
+                                const isExitRow = row === 15 || row === 16; // Exit rows
+                                const isWindow = col === 0 || col === 5;
+                                const isAisle = col === 2 || col === 3;
+                                
+                                // Calculate seat price based on position
+                                let price = pricePerStop; // Base price per stop
+                                if (isPremium) price += pricePerStop * 0.5; // 50% more for premium
+                                if (isExitRow) price += pricePerStop * 0.3; // 30% more for exit row
+                                if (isWindow) price += pricePerStop * 0.2; // 20% more for window
+                                if (isAisle) price += pricePerStop * 0.1; // 10% more for aisle
+                                
+                                return {
+                                    number: seatNumber,
+                                    characteristics: isOccupied ? ['OCCUPIED'] : ['AVAILABLE'],
+                                    price: isOccupied ? null : Math.round(price) // No price for occupied seats
+                                };
+                            })
+                        }]
+                    }]
+                };
+            } catch (error) {
+                console.error('Error getting seat map:', error);
+                throw error;
+            }
+        }
+
+        // Function to book flight
+        async function bookFlight(flightOfferId, selectedSeats) {
+            try {
+                const accessToken = await getAccessToken();
+                
+                // Get flight details from the card
+                const flightCard = document.querySelector(`.book-button[onclick*="${flightOfferId}"]`).closest('.flight-card');
+                const airline = flightCard.querySelector('.airline').textContent;
+                const flightNumber = flightCard.querySelector('.flight-number').textContent;
+                const price = flightCard.querySelector('.price').textContent.replace('$', '');
+                
+                // Create a mock booking response
+                const mockBookingData = {
+                    data: {
+                        id: `BOOK-${Date.now()}`,
+                        type: "flight-order",
+                        flightOffers: [{
+                            id: flightOfferId,
+                            price: {
+                                total: price
+                            }
+                        }]
+                    }
+                };
+
+                return mockBookingData;
+            } catch (error) {
+                console.error('Error booking flight:', error);
+                throw error;
+            }
+        }
+
+        // Function to generate seat map HTML
+        function generateSeatMapHTML(seatMapData) {
+            let html = '';
+            if (seatMapData.data && seatMapData.data.length > 0) {
+                seatMapData.data.forEach(deck => {
+                    html += `<div class="deck">`;
+                    if (deck.decks && deck.decks.length > 0) {
+                        deck.decks.forEach(deckData => {
+                            if (deckData.seats) {
+                                // Sort seats by row and column
+                                const sortedSeats = [...deckData.seats].sort((a, b) => {
+                                    const rowA = parseInt(a.number.match(/\d+/)[0]);
+                                    const rowB = parseInt(b.number.match(/\d+/)[0]);
+                                    if (rowA !== rowB) return rowA - rowB;
+                                    return a.number.localeCompare(b.number);
+                                });
+
+                                sortedSeats.forEach(seat => {
+                                    const seatClass = seat.characteristics.includes('AVAILABLE') ? 'available' : 
+                                                    seat.characteristics.includes('OCCUPIED') ? 'occupied' : 'selected';
+                                    const price = seat.price ? `$${seat.price}` : '';
+                                    html += `
+                                        <div class="seat ${seatClass}" 
+                                             data-seat-number="${seat.number}"
+                                             data-seat-price="${seat.price}"
+                                             onclick="selectSeat(this)">
+                                            <span class="seat-number">${seat.number}</span>
+                                            <span class="seat-price">${price}</span>
+                                        </div>
+                                    `;
+                                });
+                            }
+                        });
+                    }
+                    html += `</div>`;
+                });
+            } else {
+                html = '<p class="no-seats">No seat map available for this flight.</p>';
+            }
+            return html;
+        }
+
+        // Function to select a seat
+        function selectSeat(seatElement) {
+            if (seatElement.classList.contains('available')) {
+                const wasSelected = seatElement.classList.contains('selected');
+                const allSelectedSeats = document.querySelectorAll('.seat.selected');
+                
+                // If this seat was already selected, deselect it
+                if (wasSelected) {
+                    seatElement.classList.remove('selected');
+                } else {
+                    // If this is a new selection, deselect all other seats first
+                    allSelectedSeats.forEach(seat => seat.classList.remove('selected'));
+                    seatElement.classList.add('selected');
+                }
+                
+                // Update total price
+                updateTotalPrice();
+            }
+        }
+
+        // Function to update total price
+        function updateTotalPrice() {
+            const selectedSeat = document.querySelector('.seat.selected');
+            const totalPriceElement = document.querySelector('.total-price');
+            
+            if (selectedSeat && totalPriceElement) {
+                const price = selectedSeat.dataset.seatPrice;
+                totalPriceElement.textContent = `Total: $${price}`;
+            }
+        }
+
+        // Function to show confirmation screen
+        function showConfirmationScreen(bookingData, flightDetails) {
+            const modal = document.createElement('div');
+            modal.className = 'confirmation-modal';
+            modal.innerHTML = `
+                <div class="confirmation-content">
+                    <div class="confirmation-header">
+                        <i class="fas fa-check-circle"></i>
+                        <h2>Flight Confirmed!</h2>
+                    </div>
+                    <div class="confirmation-details">
+                        <div class="flight-info">
+                            <h3>Flight Details</h3>
+                            <div class="info-row">
+                                <span class="label">Booking Reference:</span>
+                                <span class="value">${bookingData.data.id}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Airline:</span>
+                                <span class="value">${flightDetails.airline}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Flight Number:</span>
+                                <span class="value">${flightDetails.flightNumber}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">From:</span>
+                                <span class="value">${flightDetails.departure}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">To:</span>
+                                <span class="value">${flightDetails.arrival}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Date:</span>
+                                <span class="value">${flightDetails.date}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Seat:</span>
+                                <span class="value">${flightDetails.seat}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Total Price:</span>
+                                <span class="value">$${flightDetails.price}</span>
+                            </div>
+                        </div>
+                        <div class="enjoy-message">
+                            <h3>Enjoy Your Visit!</h3>
+                            <p>We hope you have a wonderful time exploring the local cuisine and culture.</p>
+                        </div>
+                    </div>
+                    <div class="confirmation-actions">
+                        <button class="close-button" onclick="closeConfirmation()">Close</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // Function to close confirmation screen
+        function closeConfirmation() {
+            const modal = document.querySelector('.confirmation-modal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // Function to close seat map modal
+        function closeSeatMap() {
+            const modal = document.querySelector('.seat-map-modal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // Update the showSeatMap function
+        async function showSeatMap(flightOfferId) {
+            try {
+                const seatMapData = await getSeatMap(flightOfferId);
+                const modal = document.createElement('div');
+                modal.className = 'seat-map-modal';
+                modal.dataset.flightId = flightOfferId;
+                modal.innerHTML = `
+                    <div class="seat-map-content">
+                        <h2>Select Your Seats</h2>
+                        <div class="seat-map-container">
+                            <div class="seat-map">
+                                ${generateSeatMapHTML(seatMapData)}
+                            </div>
+                        </div>
+                        <div class="seat-map-legend">
+                            <div class="legend-item">
+                                <span class="seat available"></span>
+                                <span>Available</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="seat selected"></span>
+                                <span>Selected</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="seat occupied"></span>
+                                <span>Occupied</span>
+                            </div>
+                        </div>
+                        <div class="total-price">Total: $0</div>
+                        <div class="seat-map-actions">
+                            <button class="cancel-button" onclick="closeSeatMap()">Cancel</button>
+                            <button class="confirm-button" onclick="confirmSeatSelection()">Confirm Selection</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            } catch (error) {
+                console.error('Error loading seat map:', error);
+                alert('Error loading seat map: ' + error.message);
+            }
+        }
+
+        // Update the confirmSeatSelection function
+        async function confirmSeatSelection() {
+            const selectedSeat = document.querySelector('.seat.selected');
+            if (!selectedSeat) {
+                alert('Please select a seat');
+                return;
+            }
+
+            try {
+                const flightOfferId = document.querySelector('.seat-map-modal').dataset.flightId;
+                const seatNumber = selectedSeat.dataset.seatNumber;
+                const seatPrice = selectedSeat.dataset.seatPrice;
+                
+                // Get flight details from the card
+                const flightCard = document.querySelector(`.book-button[onclick*="${flightOfferId}"]`).closest('.flight-card');
+                const airline = flightCard.querySelector('.airline').textContent;
+                const flightNumber = flightCard.querySelector('.flight-number').textContent;
+                const departure = flightCard.querySelector('.departure .airport').textContent;
+                const arrival = flightCard.querySelector('.arrival .airport').textContent;
+                const date = document.getElementById('departure-date').value;
+
+                const bookingData = await bookFlight(flightOfferId, [seatNumber]);
+                closeSeatMap();
+                
+                // Show confirmation screen
+                showConfirmationScreen(bookingData, {
+                    airline,
+                    flightNumber,
+                    departure,
+                    arrival,
+                    date,
+                    seat: seatNumber,
+                    price: seatPrice
+                });
+            } catch (error) {
+                alert('Error booking flight: ' + error.message);
+            }
+        }
+
+        // Function to handle airport input
+        function handleAirportInput(input, isOrigin = true) {
+            const value = input.value.toUpperCase();
+            const autocompleteList = document.getElementById(isOrigin ? 'origin-autocomplete' : 'destination-autocomplete');
+            
+            // Clear previous suggestions
+            autocompleteList.innerHTML = '';
+            
+            if (value.length >= 2) {
+                // Get the airport names mapping from getAirportName function
+                const airportNames = {
+                    'FCO': 'Rome Fiumicino',
+                    'JFK': 'New York JFK',
+                    'LHR': 'London Heathrow',
+                    'YYZ': 'Toronto Pearson',
+                    'PEK': 'Beijing Capital',
+                    'ZAG': 'Zagreb',
+                    'AMS': 'Amsterdam Schiphol',
+                    'CAI': 'Cairo',
+                    'MNL': 'Manila',
+                    'CDG': 'Paris Charles de Gaulle',
+                    'ATH': 'Athens',
+                    'DEL': 'Delhi',
+                    'DUB': 'Dublin',
+                    'KIN': 'Kingston',
+                    'HND': 'Tokyo Haneda',
+                    'NBO': 'Nairobi',
+                    'KUL': 'Kuala Lumpur',
+                    'MEX': 'Mexico City',
+                    'CMN': 'Casablanca',
+                    'WAW': 'Warsaw',
+                    'LIS': 'Lisbon',
+                    'SVO': 'Moscow Sheremetyevo',
+                    'MAD': 'Madrid',
+                    'BKK': 'Bangkok',
+                    'TUN': 'Tunis',
+                    'IST': 'Istanbul',
+                    'SGN': 'Ho Chi Minh City',
+                    'ALG': 'Algiers',
+                    'EVN': 'Yerevan',
+                    'BRU': 'Brussels',
+                    'GRU': 'São Paulo',
+                    'HAV': 'Havana',
+                    'PRG': 'Prague',
+                    'CPH': 'Copenhagen',
+                    'TLL': 'Tallinn',
+                    'HEL': 'Helsinki',
+                    'FRA': 'Frankfurt',
+                    'BUD': 'Budapest',
+                    'KEF': 'Reykjavik',
+                    'IKA': 'Tehran',
+                    'TLV': 'Tel Aviv',
+                    'ICN': 'Seoul Incheon',
+                    'RIX': 'Riga',
+                    'VNO': 'Vilnius',
+                    'OSL': 'Oslo',
+                    'LIM': 'Lima',
+                    'OTP': 'Bucharest',
+                    'BEG': 'Belgrade',
+                    'BTS': 'Bratislava',
+                    'ARN': 'Stockholm',
+                    'ZRH': 'Zurich',
+                    'DAM': 'Damascus',
+                    'TPE': 'Taipei',
+                    'KBP': 'Kyiv',
+                    'MVD': 'Montevideo',
+                    'CCS': 'Caracas',
+                    'CWL': 'Cardiff',
+                    'HRE': 'Harare',
+                    'XNA': 'Northwest Arkansas'
+                };
+
+                // Find matching airports
+                const matches = Object.entries(airportNames)
+                    .filter(([code, name]) => 
+                        code.includes(value) || 
+                        name.toLowerCase().includes(value.toLowerCase())
+                    )
+                    .slice(0, 5); // Limit to 5 suggestions
+                
+                if (matches.length > 0) {
+                    matches.forEach(([code, name]) => {
+                        const option = document.createElement('div');
+                        option.className = 'autocomplete-option';
+                        option.textContent = `${code} - ${name}`;
+                        option.onclick = () => {
+                            input.value = `${code} - ${name}`;
+                            autocompleteList.innerHTML = '';
+                        };
+                        autocompleteList.appendChild(option);
+                    });
+                    autocompleteList.style.display = 'block';
+                } else {
+                    autocompleteList.style.display = 'none';
+                }
+            } else {
+                autocompleteList.style.display = 'none';
+            }
+        }
+
+        // Function to initialize the form with URL parameters
+        function initializeForm() {
+            // Get URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const destination = urlParams.get('destination');
+            const airport = urlParams.get('airport');
+
+            // Set default dates
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const nextWeek = new Date(tomorrow);
+            nextWeek.setDate(nextWeek.getDate() + 7);
+
+            // Format dates for input fields
+            const formatDate = (date) => {
+                return date.toISOString().split('T')[0];
+            };
+
+            // Set form values
+            if (destination && airport) {
+                const airportName = getAirportName(airport);
+                document.getElementById('destination').value = `${airport} - ${airportName}`;
+            }
+
+            document.getElementById('departure-date').value = formatDate(tomorrow);
+            document.getElementById('return-date').value = formatDate(nextWeek);
+            document.getElementById('departure-date').min = formatDate(today);
+            document.getElementById('return-date').min = formatDate(tomorrow);
+        }
+
+        // Function to get airport name from code
+        function getAirportName(code) {
+            const airportNames = {
+                'FCO': 'Rome Fiumicino',
+                'JFK': 'New York JFK',
+                'LHR': 'London Heathrow',
+                'YYZ': 'Toronto Pearson',
+                'PEK': 'Beijing Capital',
+                'ZAG': 'Zagreb',
+                'AMS': 'Amsterdam Schiphol',
+                'CAI': 'Cairo',
+                'MNL': 'Manila',
+                'CDG': 'Paris Charles de Gaulle',
+                'ATH': 'Athens',
+                'DEL': 'Delhi',
+                'DUB': 'Dublin',
+                'KIN': 'Kingston',
+                'HND': 'Tokyo Haneda',
+                'NBO': 'Nairobi',
+                'KUL': 'Kuala Lumpur',
+                'MEX': 'Mexico City',
+                'CMN': 'Casablanca',
+                'WAW': 'Warsaw',
+                'LIS': 'Lisbon',
+                'SVO': 'Moscow Sheremetyevo',
+                'MAD': 'Madrid',
+                'BKK': 'Bangkok',
+                'TUN': 'Tunis',
+                'IST': 'Istanbul',
+                'SGN': 'Ho Chi Minh City',
+                'ALG': 'Algiers',
+                'EVN': 'Yerevan',
+                'BRU': 'Brussels',
+                'GRU': 'São Paulo',
+                'HAV': 'Havana',
+                'PRG': 'Prague',
+                'CPH': 'Copenhagen',
+                'TLL': 'Tallinn',
+                'HEL': 'Helsinki',
+                'FRA': 'Frankfurt',
+                'BUD': 'Budapest',
+                'KEF': 'Reykjavik',
+                'IKA': 'Tehran',
+                'TLV': 'Tel Aviv',
+                'ICN': 'Seoul Incheon',
+                'RIX': 'Riga',
+                'VNO': 'Vilnius',
+                'OSL': 'Oslo',
+                'LIM': 'Lima',
+                'OTP': 'Bucharest',
+                'BEG': 'Belgrade',
+                'BTS': 'Bratislava',
+                'ARN': 'Stockholm',
+                'ZRH': 'Zurich',
+                'DAM': 'Damascus',
+                'TPE': 'Taipei',
+                'KBP': 'Kyiv',
+                'MVD': 'Montevideo',
+                'CCS': 'Caracas',
+                'CWL': 'Cardiff',
+                'HRE': 'Harare',
+                'XNA': 'Northwest Arkansas'
+            };
+
+            return airportNames[code] || code;
+        }
+
+        // Initialize the form when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeForm();
+            
+            // Add event listeners for airport inputs
+            const originInput = document.getElementById('origin');
+            const destinationInput = document.getElementById('destination');
+            
+            if (originInput) {
+                originInput.addEventListener('input', () => handleAirportInput(originInput, true));
+            }
+            
+            if (destinationInput) {
+                destinationInput.addEventListener('input', () => handleAirportInput(destinationInput, false));
+            }
+        });
+    </script>
+</body>
+</html> 

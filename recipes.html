@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cooked - Search Results</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-utensils"></i>
+                <h1>Cooked</h1>
+            </div>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="recipes.html">Recipes</a></li>
+                <li><a href="#categories">Categories</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Search Section -->
+    <section class="search-section">
+        <div class="container">
+            <form id="search-form" class="search-form">
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="Search for recipes...">
+                    <button type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- Gallery Section -->
+    <section class="gallery">
+        <div class="container">
+            <h2 id="search-results-title">All Pizzas</h2>
+            <div class="gallery-grid" id="food-gallery">
+                <!-- Food items will be dynamically added here -->
+            </div>
+        </div>
+    </section>
+
+    <script>
+        const MEALDB_BASE_URL = 'https://www.themealdb.com/api/json/v1/1';
+        
+        // Get search term from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const searchTerm = urlParams.get('search');
+
+        // Update search input and title if search term exists
+        if (searchTerm) {
+            document.getElementById('search-input').value = searchTerm;
+            document.getElementById('search-results-title').textContent = `Search Results for "${searchTerm}"`;
+        }
+
+        // Function to fetch recipes
+        async function fetchRecipes(query) {
+            try {
+                let url;
+                if (query === 'popular') {
+                    // Fetch random meals for popular section
+                    url = `${MEALDB_BASE_URL}/random.php`;
+                } else {
+                    // Search for meals by name
+                    url = `${MEALDB_BASE_URL}/search.php?s=${encodeURIComponent(query)}`;
+                }
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                
+                if (!data.meals || data.meals.length === 0) {
+                    throw new Error('No recipes found for your search');
+                }
+                
+                return data.meals;
+            } catch (error) {
+                console.error('Error fetching recipes:', error);
+                throw error;
+            }
+        }
+
+        // Function to fetch country of origin
+        async function fetchCountryOfOrigin(recipeTitle) {
+            try {
+                // First try to get the meal's area (country) directly
+                const searchUrl = `${MEALDB_BASE_URL}/search.php?s=${encodeURIComponent(recipeTitle)}`;
+                const searchResponse = await fetch(searchUrl);
+                const searchData = await searchResponse.json();
+                
+                if (searchData.meals && searchData.meals.length > 0) {
+                    const meal = searchData.meals[0];
+                    if (meal.strArea) {
+                        return meal.strArea;
+                    }
+                }
+
+                // If no area found, make an educated guess
+                return makeEducatedGuess(recipeTitle);
+            } catch (error) {
+                console.error('Error fetching country of origin:', error);
+                return makeEducatedGuess(recipeTitle);
+            }
+        }
+
+        // Function to make an educated guess about a dish's origin
+        function makeEducatedGuess(recipeTitle) {
+            const title = recipeTitle.toLowerCase();
+            
+            // Mapping of ingredients and cooking styles to likely countries
+            const originIndicators = {
+                // Italian indicators
+                'pasta': 'Italy',
+                'pizza': 'Italy',
+                'risotto': 'Italy',
+                'gnocchi': 'Italy',
+                'parmesan': 'Italy',
+                'mozzarella': 'Italy',
+                'prosciutto': 'Italy',
+                'basil': 'Italy',
+                'oregano': 'Italy',
+                'spaghetti': 'Italy',
+                'lasagna': 'Italy',
+                'ravioli': 'Italy',
+                'fettuccine': 'Italy',
+                'pesto': 'Italy',
+                
+                // Mexican indicators
+                'taco': 'Mexico',
+                'burrito': 'Mexico',
+                'enchilada': 'Mexico',
+                'quesadilla': 'Mexico',
+                'guacamole': 'Mexico',
+                'salsa': 'Mexico',
+                'jalapeno': 'Mexico',
+                'tortilla': 'Mexico',
+                'fajita': 'Mexico',
+                'tamale': 'Mexico',
+                'mole': 'Mexico',
+                'chile': 'Mexico',
+                
+                // Japanese indicators
+                'sushi': 'Japan',
+                'ramen': 'Japan',
+                'tempura': 'Japan',
+                'teriyaki': 'Japan',
+                'miso': 'Japan',
+                'wasabi': 'Japan',
+                'soy sauce': 'Japan',
+                'udon': 'Japan',
+                'sashimi': 'Japan',
+                'bento': 'Japan',
+                'dashi': 'Japan',
+                
+                // Indian indicators
+                'curry': 'India',
+                'tikka': 'India',
+                'masala': 'India',
+                'naan': 'India',
+                'samosa': 'India',
+                'tandoori': 'India',
+                'dal': 'India',
+                'biryani': 'India',
+                'vindaloo': 'India',
+                'korma': 'India',
+                'roti': 'India',
+                
+                // Chinese indicators
+                'dumpling': 'China',
+                'wonton': 'China',
+                'noodle': 'China',
+                'stir-fry': 'China',
+                'dim sum': 'China',
+                'szechuan': 'China',
+                'kung pao': 'China',
+                'lo mein': 'China',
+                'chow mein': 'China',
+                'spring roll': 'China',
+                
+                // Thai indicators
+                'pad thai': 'Thailand',
+                'tom yum': 'Thailand',
+                'green curry': 'Thailand',
+                'lemongrass': 'Thailand',
+                'coconut milk': 'Thailand',
+                'satay': 'Thailand',
+                'massaman': 'Thailand',
+                'pad see ew': 'Thailand',
+                
+                // French indicators
+                'croissant': 'France',
+                'baguette': 'France',
+                'ratatouille': 'France',
+                'quiche': 'France',
+                'crepe': 'France',
+                'bouillabaisse': 'France',
+                'coq au vin': 'France',
+                'escargot': 'France',
+                
+                // Greek indicators
+                'gyro': 'Greece',
+                'tzatziki': 'Greece',
+                'feta': 'Greece',
+                'olive': 'Greece',
+                'hummus': 'Greece',
+                'moussaka': 'Greece',
+                'souvlaki': 'Greece',
+                'baklava': 'Greece',
+                
+                // American indicators
+                'burger': 'United States',
+                'hot dog': 'United States',
+                'barbecue': 'United States',
+                'mac and cheese': 'United States',
+                'apple pie': 'United States',
+                'buffalo wings': 'United States',
+                'clam chowder': 'United States',
+                'cornbread': 'United States',
+                
+                // Spanish indicators
+                'paella': 'Spain',
+                'tapas': 'Spain',
+                'chorizo': 'Spain',
+                'gazpacho': 'Spain',
+                'tortilla': 'Spain',
+                'sangria': 'Spain',
+                
+                // Korean indicators
+                'kimchi': 'South Korea',
+                'bibimbap': 'South Korea',
+                'bulgogi': 'South Korea',
+                'korean bbq': 'South Korea',
+                'tteokbokki': 'South Korea',
+                
+                // Vietnamese indicators
+                'pho': 'Vietnam',
+                'banh mi': 'Vietnam',
+                'spring roll': 'Vietnam',
+                'bun cha': 'Vietnam',
+                'goi cuon': 'Vietnam'
+            };
+
+            // Check for matches in the recipe title
+            for (const [indicator, country] of Object.entries(originIndicators)) {
+                if (title.includes(indicator)) {
+                    return country;
+                }
+            }
+
+            // If no match found, return a default country based on common ingredients
+            const defaultCountries = [
+                'Italy', 'Mexico', 'Japan', 'India', 'China', 
+                'Thailand', 'France', 'Greece', 'United States',
+                'Spain', 'South Korea', 'Vietnam'
+            ];
+            
+            // Return a random country from the list
+            return defaultCountries[Math.floor(Math.random() * defaultCountries.length)];
+        }
+
+        // Function to display recipes
+        async function displayRecipes(recipes, searchTerm) {
+            const resultsContainer = document.getElementById('food-gallery');
+            resultsContainer.innerHTML = '';
+
+            if (!recipes || recipes.length === 0) {
+                resultsContainer.innerHTML = '<p class="no-results">No recipes found. Try a different search term.</p>';
+                return;
+            }
+
+            const title = document.getElementById('search-results-title');
+            title.textContent = searchTerm ? `Search Results for "${searchTerm}"` : 'Popular Recipes';
+
+            // Store countries for consistency
+            const recipeCountries = {};
+
+            // First, determine all countries
+            for (const recipe of recipes) {
+                const country = await fetchCountryOfOrigin(recipe.strMeal);
+                recipeCountries[recipe.idMeal] = country;
+            }
+
+            // Then display all recipes with their determined countries
+            for (const recipe of recipes) {
+                const country = recipeCountries[recipe.idMeal];
+                const recipeCard = document.createElement('div');
+                recipeCard.className = 'food-card';
+                recipeCard.onclick = () => showRecipeDetails(recipe, country);
+                recipeCard.innerHTML = `
+                    <img src="${recipe.strMealThumb}" alt="${recipe.strMeal}">
+                    <div class="food-info">
+                        <h3>${recipe.strMeal}</h3>
+                        <p class="cuisine">${country}</p>
+                        <div class="food-meta">
+                            <span><i class="fas fa-utensils"></i> ${recipe.strCategory || 'Various'}</span>
+                        </div>
+                    </div>
+                `;
+                resultsContainer.appendChild(recipeCard);
+            }
+        }
+
+        // Function to show recipe details
+        function showRecipeDetails(recipe, country) {
+            // Format ingredients list
+            const ingredients = [];
+            for (let i = 1; i <= 20; i++) {
+                const ingredient = recipe[`strIngredient${i}`];
+                const measure = recipe[`strMeasure${i}`];
+                if (ingredient && ingredient.trim() !== '') {
+                    ingredients.push({
+                        name: ingredient,
+                        amount: measure
+                    });
+                }
+            }
+
+            // Format instructions
+            const instructions = recipe.strInstructions.split('\r\n').filter(step => step.trim() !== '');
+
+            // Store recipe data in localStorage
+            const recipeData = {
+                id: recipe.idMeal,
+                title: recipe.strMeal,
+                image: recipe.strMealThumb,
+                summary: recipe.strInstructions,
+                instructions: instructions,
+                ingredients: ingredients,
+                country: country,
+                category: recipe.strCategory,
+                tags: recipe.strTags ? recipe.strTags.split(',') : [],
+                area: recipe.strArea || country // Use the API's area if available, otherwise use our determined country
+            };
+
+            localStorage.setItem('currentRecipe', JSON.stringify(recipeData));
+
+            // Redirect to recipe details page with the recipe ID
+            window.location.href = `recipe-details.html?id=${recipe.idMeal}`;
+        }
+
+        // Function to fetch a single recipe by ID
+        async function fetchRecipeById(id) {
+            try {
+                const url = `${MEALDB_BASE_URL}/lookup.php?i=${id}`;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                
+                if (!data.meals || data.meals.length === 0) {
+                    throw new Error('Recipe not found');
+                }
+                
+                return data.meals[0];
+            } catch (error) {
+                console.error('Error fetching recipe:', error);
+                throw error;
+            }
+        }
+
+        // Handle search form submission
+        document.getElementById('search-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const searchInput = document.getElementById('search-input').value.trim();
+            
+            if (searchInput) {
+                try {
+                    const recipes = await fetchRecipes(searchInput);
+                    displayRecipes(recipes, searchInput);
+                } catch (error) {
+                    document.getElementById('food-gallery').innerHTML = `
+                        <div class="error">
+                            <p>${error.message}</p>
+                            <p>Please try again with a different search term.</p>
+                        </div>
+                    `;
+                    document.getElementById('search-results-title').textContent = 'Search Results';
+                }
+            }
+        });
+
+        // Initial load - use search term from URL or show popular recipes
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const initialSearchTerm = searchTerm || 'popular';
+                const recipes = await fetchRecipes(initialSearchTerm);
+                displayRecipes(recipes, initialSearchTerm);
+            } catch (error) {
+                console.error('Error loading initial recipes:', error);
+                document.getElementById('food-gallery').innerHTML = `
+                    <div class="error">
+                        <p>Error loading recipes. Please try again later.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html> 
