@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Gallery</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">Food Explorer</div>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="gallery.html">Gallery</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Gallery Section -->
+    <section class="gallery">
+        <div class="container">
+            <h1 id="gallery-title">Food Gallery</h1>
+            <div class="gallery-grid" id="food-gallery">
+                <!-- Food items will be dynamically added here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Ingredients Modal -->
+    <div id="ingredients-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 id="modal-title"></h2>
+            <div class="ingredients-list">
+                <h3>Ingredients:</h3>
+                <ul id="ingredients-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = 'cc56525224e1462ab0525d56d16e03eb';
+        const BASE_URL = 'https://api.spoonacular.com/recipes';
+
+        // Get the search term from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const searchTerm = urlParams.get('search') || 'pizza';
+
+        // Update the gallery title
+        document.getElementById('gallery-title').textContent = `${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1)} Gallery`;
+
+        // Function to fetch recipes from Spoonacular API
+        async function fetchRecipes() {
+            try {
+                const response = await fetch(`${BASE_URL}/complexSearch?apiKey=${API_KEY}&query=${searchTerm}&number=10&addRecipeInformation=true`);
+                const data = await response.json();
+                
+                if (data.results && data.results.length > 0) {
+                    displayFoodItems(data.results);
+                } else {
+                    document.getElementById('food-gallery').innerHTML = '<p>No recipes found. Try a different search term.</p>';
+                }
+            } catch (error) {
+                console.error('Error fetching recipes:', error);
+                document.getElementById('food-gallery').innerHTML = '<p>Error loading recipes. Please try again later.</p>';
+            }
+        }
+
+        // Function to display food items
+        function displayFoodItems(recipes) {
+            const gallery = document.getElementById('food-gallery');
+            
+            gallery.innerHTML = recipes.map(recipe => `
+                <a href="pizza-details.html?title=${encodeURIComponent(recipe.title)}&image=${encodeURIComponent(recipe.image)}&id=${recipe.id}" class="food-item">
+                    <h3>${recipe.title}</h3>
+                    <img src="${recipe.image}" alt="${recipe.title}">
+                    <div class="recipe-info">
+                        <p><i class="fas fa-utensils"></i> ${recipe.servings} servings</p>
+                        <p><i class="fas fa-clock"></i> ${recipe.readyInMinutes} mins</p>
+                    </div>
+                </a>
+            `).join('');
+        }
+
+        // Function to show ingredients modal
+        function showIngredients(title, ingredients) {
+            const modal = document.getElementById('ingredients-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const ingredientsList = document.getElementById('ingredients-list');
+            
+            modalTitle.textContent = title;
+            ingredientsList.innerHTML = ingredients.map(ingredient => 
+                `<li>${ingredient}</li>`
+            ).join('');
+            
+            modal.style.display = 'block';
+        }
+
+        // Close modal when clicking the X
+        document.querySelector('.close-modal').addEventListener('click', function() {
+            document.getElementById('ingredients-modal').style.display = 'none';
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('ingredients-modal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        // Fetch recipes when page loads
+        fetchRecipes();
+    </script>
+</body>
+</html> 
